@@ -152,7 +152,7 @@ public abstract class StateList<T extends State> {
     }
 
     @SuppressWarnings("unchecked")
-    public T[] query(JSONObject query) {
+    public ArrayList<T> query(JSONObject query) {
         if (!query.has("selector")) {
             query.put("selector", new JSONObject());
         }
@@ -196,25 +196,26 @@ public abstract class StateList<T extends State> {
             }
         }
 
-        T[] valuesArr = (T[])  new Object[valuesArrMap.size()];
+        // T[] valuesArr = (T[]) new State[valuesArrMap.size()];
+        ArrayList<T> valuesArr = new ArrayList<T>();
 
-        int counter = 0;
         for (Map.Entry<String, JSONObject> result : valuesArrMap.entrySet()) {
             T state;
             try {
                 state = this.deserialize(result.getValue(), usedCollections.toArray(new String[usedCollections.size()]));
             } catch (RuntimeException err) {
+                err.printStackTrace();
                 throw new RuntimeException("Failed to run query. " + err.getMessage());
             }
 
-            valuesArr[counter] = state;
-            counter++;
+            // valuesArr[counter] = state;
+            valuesArr.add(state);
         }
 
         return valuesArr;
     }
 
-    public T[] getAll() {
+    public ArrayList<T> getAll() {
         return this.query(new JSONObject());
     }
 

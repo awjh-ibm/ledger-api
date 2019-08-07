@@ -84,7 +84,7 @@ public class CollectionRulesHandler {
 
     private Boolean collectionFound(Node<CollectionRules> node) {
         final String collection = this.parseQuotedString(node);
-        
+
         return this.collections.contains(collection);
     }
 
@@ -103,7 +103,7 @@ public class CollectionRulesHandler {
 
         for (Node<CollectionRules> sequence: otherComparisonItems) {
             Node<CollectionRules> comparisonItem = sequence.getChildren().get(2);
-            
+
             switch (op) {
                 case OR: result = result || this.evaluate(comparisonItem); break;
                 case AND: result = result && this.evaluate(comparisonItem); break;
