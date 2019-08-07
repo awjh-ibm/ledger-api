@@ -32,13 +32,9 @@ dependencies {
 }
 
 shadowJar {
-    baseName = 'chaincode'
+    baseName = 'ledger_api'
     version = null
     classifier = null
-
-    manifest {
-        attributes 'Main-Class': 'org.hyperledger.fabric.contract.ContractRouter'
-    }
 }
 
 test {
@@ -48,7 +44,8 @@ test {
     }
 }
 
-
 tasks.withType(JavaCompile) {
   options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation" << "-parameters"
 }
+
+build.dependsOn(shadowJar);
