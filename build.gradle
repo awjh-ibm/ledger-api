@@ -33,7 +33,7 @@ dependencies {
 
 shadowJar {
     baseName = 'ledger_api'
-    version = null
+    version = version
     classifier = null
 }
 
