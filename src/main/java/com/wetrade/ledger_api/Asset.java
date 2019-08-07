@@ -13,7 +13,7 @@ public abstract class Asset extends State {
         this.id = id;
     }
 
-    protected Asset(String id, String hash) {
+    public Asset(String id, String hash) {
         super(new String[]{id}, hash);
         this.id = id;
     }
