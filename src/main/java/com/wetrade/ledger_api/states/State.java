@@ -142,7 +142,6 @@ public abstract class State {
 
     private static <T extends State> T buildState(Object[] args, Constructor<T> constructor) {
         try {
-            System.out.println(Arrays.toString(args));
             return constructor.newInstance(args);
         } catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             throw new RuntimeException(e.getMessage());

@@ -20,7 +20,6 @@ import org.json.JSONObject;
 public abstract class StateList<T extends State> {
     private String name;
     private Map<String, Class<? extends T>> supportedClasses;
-    private Map<String, String[]> collectionsMap;
     private ArrayList<String> collections;
     private Context ctx;
 
@@ -28,7 +27,6 @@ public abstract class StateList<T extends State> {
         this.ctx = ctx;
         this.name = listName;
         this.supportedClasses = new HashMap<String, Class<? extends T>>();
-        this.collectionsMap = new HashMap<String, String[]>();
         this.collections = new ArrayList<String>();
     }
 
@@ -50,17 +48,21 @@ public abstract class StateList<T extends State> {
 
         final String key = this.ctx.getStub().createCompositeKey(this.name, state.getSplitKey()).toString();
 
-        final byte[] worldStateData = state.serialize().getBytes();
+        final String serialized = state.serialize();
+        final byte[] worldStateData = serialized.getBytes();
 
         this.ctx.getStub().putState(key, worldStateData);
 
-        for (String collection : this.collectionsMap.get(state.getClass().getName())) {
-            final byte[] privateData = state.serialize(collection).getBytes();
+        for (String collection : this.getCollections(state.getClass())) {
+            final String collectionSerialized = state.serialize(collection);
+            final byte[] privateData = collectionSerialized.getBytes();
 
-            try {
-                this.ctx.getStub().putPrivateData(collection, key, privateData);
-            } catch (Exception err) {
-                // TODO CHECK IF THIS HAPPENS AS NOT ALLOWED OR BECAUSE OTHER BAD THINGS HAVE HAPPENED
+            if (privateData.length > 2) {
+                try {
+                    this.ctx.getStub().putPrivateData(collection, key, privateData);
+                } catch (Exception err) {
+                    // TODO CHECK IF THIS HAPPENS AS NOT ALLOWED OR BECAUSE OTHER BAD THINGS HAVE HAPPENED
+                }
             }
         }
     }
@@ -90,7 +92,7 @@ public abstract class StateList<T extends State> {
 
         ArrayList<String> usedCollections = new ArrayList<String>();
 
-        for (String collection : this.collectionsMap.get(clazz.getName())) {
+        for (String collection : this.getCollections(clazz)) {
             try {
                 final String privateData = new String(ctx.getStub().getPrivateData(collection, ledgerKey));
 
@@ -151,7 +153,6 @@ public abstract class StateList<T extends State> {
         return hsArr;
     }
 
-    @SuppressWarnings("unchecked")
     public ArrayList<T> query(JSONObject query) {
         if (!query.has("selector")) {
             query.put("selector", new JSONObject());
@@ -162,8 +163,12 @@ public abstract class StateList<T extends State> {
 
         Map<String, JSONObject> valuesArrMap = new HashMap<String, JSONObject>();
 
-        java.util.function.Consumer<QueryResultsIterator<KeyValue>> iterate = (values) -> {
+        java.util.function.Predicate<QueryResultsIterator<KeyValue>> iterate = (values) -> {
+            boolean used = false;
+
             for (KeyValue value : values) {
+                used = true;
+
                 final String data = value.getStringValue();
 
                 JSONObject json = new JSONObject(data);
@@ -178,19 +183,21 @@ public abstract class StateList<T extends State> {
 
                 valuesArrMap.put(value.getKey(), json);
             }
+
+            return used;
         };
 
         final QueryResultsIterator<KeyValue> worldStateValues = this.ctx.getStub().getQueryResult(query.toString());
-        iterate.accept(worldStateValues);
+        iterate.test(worldStateValues);
 
         ArrayList<String> usedCollections = new ArrayList<String>();
 
         for (String collection : this.collections) {
             try {
                 final QueryResultsIterator<KeyValue> privateValues = this.ctx.getStub().getPrivateDataQueryResult(collection, query.toString());
-                iterate.accept(privateValues);
-
-                usedCollections.add(collection);
+                if (iterate.test(privateValues)) {
+                    usedCollections.add(collection);
+                }
             } catch (Exception err) {
                 // can't use that store
             }
@@ -248,13 +255,15 @@ public abstract class StateList<T extends State> {
 
         this.ctx.getStub().putState(ledgerKey, data);
 
-        for (String collection : this.collectionsMap.get(state.getClass().getName())) {
+        for (String collection : this.getCollections(state.getClass())) {
             final byte[] privateData = state.serialize(collection).getBytes();
 
-            try {
-                this.ctx.getStub().putPrivateData(collection, ledgerKey, privateData);
-            } catch (Exception err) {
-                // can't access that store
+            if (privateData.length > 2) {
+                try {
+                    this.ctx.getStub().putPrivateData(collection, ledgerKey, privateData);
+                } catch (Exception err) {
+                    // can't access that store
+                }
             }
         }
     }
@@ -267,7 +276,7 @@ public abstract class StateList<T extends State> {
 
             this.ctx.getStub().delState(ledgerKey);
 
-            for (String collection : this.collectionsMap.get(state.getClass().getName())) {
+            for (String collection : this.getCollections(state.getClass())) {
                 try {
                     this.ctx.getStub().delPrivateData(collection, ledgerKey);
                 } catch (Exception err) {
@@ -300,7 +309,6 @@ public abstract class StateList<T extends State> {
         this.supportedClasses.put(stateClass.getName(), stateClass);
 
         String[] collections = this.getCollections(stateClass);
-        this.collectionsMap.put(stateClass.getName(), collections);
 
         for (String collection : collections ) {
             if (!this.collections.contains(collection)) {
