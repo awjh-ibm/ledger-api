@@ -58,4 +58,11 @@ publishing {
     }
 }
 
+task buildSubmodules(type: Exec) {
+    println "Before the build"
+    commandLine "$projectDir/scripts/before_install.sh"
+}
+
+assemble.dependsOn(buildSubmodules);
+
 build.dependsOn(shadowJar);
