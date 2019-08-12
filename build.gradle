@@ -3,7 +3,6 @@
  */
 plugins {
     id 'maven-publish'
-    id 'com.github.johnrengelman.shadow' version '5.1.0'
     id 'java'
 }
 
@@ -24,19 +23,12 @@ repositories {
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
     compile group: 'org.hyperledger.fabric-chaincode-java', name: 'fabric-chaincode-shim', version: '1.4.2'
     compile group: 'org.parboiled', name: 'parboiled-java', version: '1.1.8'
     compile group: 'org.json', name: 'json', version: '20180813'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.4.2'
     testImplementation 'org.assertj:assertj-core:3.11.1'
     testImplementation 'org.mockito:mockito-core:2.+'
-}
-
-shadowJar {
-    baseName = 'ledger_api'
-    version = version
-    classifier = null
 }
 
 test {
@@ -81,5 +73,3 @@ publishing {
         }
     }
 }
-
-build.dependsOn(shadowJar);
