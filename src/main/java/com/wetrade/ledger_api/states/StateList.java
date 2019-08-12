@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import com.wetrade.ledger_api.annotations.Private;
 import com.wetrade.ledger_api.collections.CollectionRulesHandler;
@@ -154,12 +155,63 @@ public abstract class StateList<T extends State> {
     }
 
     public ArrayList<T> query(JSONObject query) {
-        if (!query.has("selector")) {
-            query.put("selector", new JSONObject());
+        final JSONObject baseQuery = new JSONObject("{\"selector\": {}}");
+        baseQuery.getJSONObject("selector").put("_id", new JSONObject());
+        baseQuery.getJSONObject("selector").getJSONObject("_id").put("$regex", ".*" +  this.name + ".*");
+
+        Map<String, JSONObject> collectionQueries = new HashMap<String, JSONObject>();
+        collectionQueries.put("worldstate", new JSONObject("{\"required\": true, \"json\": " + baseQuery.toString() + "}"));
+
+        for (String collection: this.collections) {
+            collectionQueries.put(collection, new JSONObject("{\"required\": false, \"json\": " + baseQuery.toString() + "}"));
         }
 
-        query.getJSONObject("selector").put("_id", new JSONObject());
-        query.getJSONObject("selector").getJSONObject("_id").put("$regex", ".*" +  this.name + ".*");
+        if (query.has("selector")) {
+            // TODO add refinement for handling all couchdb formats
+            // TODO make it handle when sub properties may be further private
+            // TODO tidy into smaller functions
+            // TODO explore how to do an or over multiple tables as for now requires a value to be returned by all the necessary tables
+            JSONObject selector = query.getJSONObject("selector");
+
+            for (String property : selector.keySet()) {
+                for (Entry<String, Class<? extends T>> entry : this.supportedClasses.entrySet()) {
+                    Class<? extends T> clazz = entry.getValue();
+
+                    try {
+                        Field field = clazz.getDeclaredField(property);
+                        final Private annotation = field.getAnnotation(Private.class);
+
+                        if (annotation != null) {
+                            CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections());
+                            final String[] entries = collectionHandler.getEntries();
+            
+                            for (String collection : entries) {
+                                JSONObject collectionMapProp = collectionQueries.get(collection);
+                                collectionMapProp.put("required", true);
+                                JSONObject collectionSelector = collectionMapProp.getJSONObject("json").getJSONObject("selector");
+                                collectionSelector.put(property, selector.get(property));
+                            }
+                        } else {
+                            JSONObject worldStateSelector = collectionQueries.get("worldstate").getJSONObject("json").getJSONObject("selector");
+                            worldStateSelector.put(property, selector.get(property));
+                        }
+
+                    } catch (NoSuchFieldException | SecurityException e) {
+                        throw new RuntimeException("Property " + property + " does not exist for state type " + entry.getValue().getName());
+                    }
+                }
+            }
+        }
+
+        int requiredCollections = 0;
+
+        for (Entry<String, JSONObject> entry : collectionQueries.entrySet()) {
+            if (entry.getValue().getBoolean("required")) {
+                requiredCollections++;
+            }
+        }
+
+        // TODO IF HAS SELECTOR LOOK UP WHETHER THE PROPERTY FOR THAT SELECTOR HAS A PRIVATE ANNOTATION, QUERY AGAINST COLLECTIONS WITH THAT THEN GRAB REST OF THE DATA FROM OTHER COLLECTIONS
 
         Map<String, JSONObject> valuesArrMap = new HashMap<String, JSONObject>();
 
@@ -172,29 +224,39 @@ public abstract class StateList<T extends State> {
                 final String data = value.getStringValue();
 
                 JSONObject json = new JSONObject(data);
+                int count = 1;
+
+                JSONObject mapProp = new JSONObject();
 
                 if (valuesArrMap.containsKey(value.getKey())) {
-                    final JSONObject existingJSON = valuesArrMap.get(value.getKey());
+                    final JSONObject existing = valuesArrMap.get(value.getKey());
+                    int existingCount = existing.getInt("collectionCount");
+                    final JSONObject existingJSON = existing.getJSONObject("json");
 
                     for (String jsonKey : JSONObject.getNames(existingJSON)) {
                         json.put(jsonKey, existingJSON.get(jsonKey));
                     }
+
+                    count = existingCount + 1;
                 }
 
-                valuesArrMap.put(value.getKey(), json);
+                mapProp.put("json", json);
+                mapProp.put("collectionCount", count);
+
+                valuesArrMap.put(value.getKey(), mapProp);
             }
 
             return used;
         };
 
-        final QueryResultsIterator<KeyValue> worldStateValues = this.ctx.getStub().getQueryResult(query.toString());
+        final QueryResultsIterator<KeyValue> worldStateValues = this.ctx.getStub().getQueryResult(collectionQueries.get("worldstate").getJSONObject("json").toString());
         iterate.test(worldStateValues);
 
         ArrayList<String> usedCollections = new ArrayList<String>();
 
         for (String collection : this.collections) {
             try {
-                final QueryResultsIterator<KeyValue> privateValues = this.ctx.getStub().getPrivateDataQueryResult(collection, query.toString());
+                final QueryResultsIterator<KeyValue> privateValues = this.ctx.getStub().getPrivateDataQueryResult(collection, collectionQueries.get(collection).getJSONObject("json").toString());
                 if (iterate.test(privateValues)) {
                     usedCollections.add(collection);
                 }
@@ -209,14 +271,16 @@ public abstract class StateList<T extends State> {
         for (Map.Entry<String, JSONObject> result : valuesArrMap.entrySet()) {
             T state;
             try {
-                state = this.deserialize(result.getValue(), usedCollections.toArray(new String[usedCollections.size()]));
+                JSONObject mapProp = result.getValue();
+
+                if (mapProp.getInt("collectionCount") >= requiredCollections) {
+                    state = this.deserialize(mapProp.getJSONObject("json"), usedCollections.toArray(new String[usedCollections.size()]));
+                    valuesArr.add(state);
+                }
             } catch (RuntimeException err) {
                 err.printStackTrace();
                 throw new RuntimeException("Failed to run query. " + err.getMessage());
             }
-
-            // valuesArr[counter] = state;
-            valuesArr.add(state);
         }
 
         return valuesArr;
@@ -245,7 +309,7 @@ public abstract class StateList<T extends State> {
     public void update(T state, boolean force) throws RuntimeException {
         final String stateKey = state.getKey();
 
-        if (this.exists(stateKey) && !force) {
+        if (!this.exists(stateKey) && !force) {
             throw new RuntimeException("Cannot update state. No state exists for key " + stateKey);
         }
 
