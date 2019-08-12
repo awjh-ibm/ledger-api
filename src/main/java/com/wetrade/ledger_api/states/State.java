@@ -122,7 +122,7 @@ public abstract class State {
             }
 
             // TODO extend to cover more than just simple types, maybe move to won function handle arrays
-            if (parameterType.getSimpleName() == "Double") {
+            if (parameterType.getSimpleName().equals("Double")) {
                 args[i] = jsonObject.getDouble(parameterName);
             } else if (State.class.isAssignableFrom(parameterType)) {
                 @SuppressWarnings("unchecked")
