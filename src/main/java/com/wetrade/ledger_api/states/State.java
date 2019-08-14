@@ -1,13 +1,16 @@
 package com.wetrade.ledger_api.states;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Map;
 
 import com.wetrade.ledger_api.annotations.DefaultDeserialize;
@@ -20,6 +23,7 @@ import org.hyperledger.fabric.contract.execution.JSONTransactionSerializer;
 import org.hyperledger.fabric.contract.metadata.TypeSchema;
 import org.hyperledger.fabric.contract.routing.TypeRegistry;
 import org.hyperledger.fabric.contract.routing.impl.TypeRegistryImpl;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -121,21 +125,48 @@ public abstract class State {
                 throw new JSONException("State missing required constructor argument " + parameterName);
             }
 
-            // TODO extend to cover more than just simple types, maybe move to won function handle arrays
-            if (parameterType.getSimpleName().equals("Double")) {
-                args[i] = jsonObject.getDouble(parameterName);
-            } else if (Enum.class.isAssignableFrom(parameterType)) {
-                args[i] = jsonObject.getEnum((Class) parameterType, parameterName);
-            } else if (State.class.isAssignableFrom(parameterType)) {
-                @SuppressWarnings("unchecked")
-                Class<T> propClass = (Class<T>) parameterType;
-                args[i] = State.deserialize(propClass, jsonObject.getJSONObject(parameterName).toString(), collections);
-            } else {
-                args[i] = jsonObject.get(parameterName);
-            }
+            args[i] = State.resolveJSON(parameterType, jsonObject.get(parameterName), collections);
         }
 
         return State.buildState(args, matchingConstructor);
+    }
+
+    private static <T extends State> Object resolveJSON(Class<?> type, Object value, String[] collections) {
+        // TODO does matthews code solve this
+        if (State.class.isAssignableFrom(type)) {
+            @SuppressWarnings("unchecked")
+            Class<T> tClass = (Class<T>) type;
+            // value should be a json object in this sense
+            return State.deserialize(tClass, value.toString(), collections);
+        } else if (type.getName().equals("java.util.Date")) {
+            return new Date((long) value);
+        } else if (Enum.class.isAssignableFrom(type)) {
+            try {
+                Method valueOf = type.getMethod("valueOf", String.class);
+                return valueOf.invoke(null, value);
+            } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+                // should not this this
+                e.printStackTrace();
+            }
+        } else if (type.isArray() || Number.class.isAssignableFrom(type)) {
+            final TypeRegistry tr = new TypeRegistryImpl(); // may need some setting up
+            final JSONTransactionSerializer jts = new JSONTransactionSerializer(tr);
+
+            final TypeSchema schema = TypeSchema.typeConvert(type);
+
+            String str;
+
+            if (type.isArray()) {
+                final JSONArray jsonArray = (JSONArray) value;
+                str = jsonArray.toString();
+            } else {
+                str = ((Number) value).toString();
+            }
+            
+            return jts.fromBuffer(str.getBytes(), schema);
+        }
+
+        return value;
     }
 
     public static State deserialize(String json) {
@@ -190,9 +221,12 @@ public abstract class State {
             if (force || this.shouldAddToJSON(collection, field)) {
                 try {
                     Object value = field.get(this);
+
                     if (value instanceof State) {
                         State stateValue = (State) value;
                         json.put(field.getName(), new JSONObject(stateValue.serialize(collection, force)));
+                    } else if (field.getType().getName().equals("java.util.Date") && value != null) {
+                        json.put(field.getName(), ((Date) value).getTime());
                     } else {
                         json.put(field.getName(), value);
                     }

@@ -256,11 +256,13 @@ public abstract class StateList<T extends State> {
 
         for (String collection : this.collections) {
             try {
-                final QueryResultsIterator<KeyValue> privateValues = this.ctx.getStub().getPrivateDataQueryResult(collection, collectionQueries.get(collection).getJSONObject("json").toString());
+                final String queryString = collectionQueries.get(collection).getJSONObject("json").toString();
+                final QueryResultsIterator<KeyValue> privateValues = this.ctx.getStub().getPrivateDataQueryResult(collection, queryString);
                 if (iterate.test(privateValues)) {
                     usedCollections.add(collection);
                 }
             } catch (Exception err) {
+                err.printStackTrace();
                 // can't use that store
             }
         }
