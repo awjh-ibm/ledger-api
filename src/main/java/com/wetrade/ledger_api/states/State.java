@@ -1,6 +1,5 @@
 package com.wetrade.ledger_api.states;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -54,7 +53,7 @@ public abstract class State {
 
                 TypeRegistry tr = new TypeRegistryImpl(); // may need some setting up
                 JSONTransactionSerializer jts = new JSONTransactionSerializer(tr);
-                
+
                 Object[] args = new Object[parameters.length];
 
                 for (int i = 0; i < parameters.length; i++) {
@@ -64,7 +63,7 @@ public abstract class State {
                     if (!transientData.containsKey(paramName)) {
                         throw new RuntimeException("Transient data missing required property: " + paramName);
                     }
-                    
+
                     TypeSchema schema = TypeSchema.typeConvert(param.getType());
                     args[i] = jts.fromBuffer(transientData.get(paramName), schema);
                 }
@@ -81,7 +80,7 @@ public abstract class State {
     public static <T extends State> T deserialize(Class<T> clazz, String json, String[] collections) {
         @SuppressWarnings("unchecked")
         Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
-        
+
         Constructor<T> matchingConstructor = null;
 
         for (Constructor<T> constructor : constructors) {
@@ -90,7 +89,7 @@ public abstract class State {
 
                 if (annotation != null) {
                     CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections(), collections);
-                    
+
                     if (collectionHandler.evaluate()) {
                         if (matchingConstructor == null || constructor.getParameterCount() > matchingConstructor.getParameterCount()) {
                             matchingConstructor = constructor;
@@ -162,7 +161,7 @@ public abstract class State {
             } else {
                 str = ((Number) value).toString();
             }
-            
+
             return jts.fromBuffer(str.getBytes(), schema);
         }
 
@@ -266,7 +265,7 @@ public abstract class State {
             // SHOULD NEVER HAPPEN BUT CHEERS UP JAVA
             return "";
         }
-        
+
         byte[] encodedHash = digest.digest(jsonObject.toString().getBytes());
 
         StringBuilder sb = new StringBuilder();

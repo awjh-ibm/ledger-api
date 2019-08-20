@@ -3,10 +3,8 @@ package com.wetrade.ledger_api.handling;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.Map.Entry;
 
 import com.wetrade.ledger_api.annotations.Private;
 import com.wetrade.ledger_api.collections.CollectionRulesHandler;
@@ -41,22 +39,22 @@ public class QueryHandler<T extends State> {
         final String worldStateQueryString = collectionQueries.get("worldState").getJSONObject("json").toString();
         final QueryResultsIterator<KeyValue> worldStateValues = this.ctx.getStub().getQueryResult(worldStateQueryString);
         queryResults.add(this.iterateIntoMap(worldStateValues));
-        
+
         Set<String> foundIds = queryResults.get(0).keySet();
 
         for (String collection : this.collections) {
             boolean required = collectionQueries.get(collection).getBoolean("required");
             JSONObject collectionJSON = collectionQueries.get(collection).getJSONObject("json");
-            
+
             // todo update keys and remove those that are already in the map and don't exist here
             String idLimiter = new JSONArray(foundIds).toString();
-            
+
             collectionJSON.getJSONObject("selector").put("_id", new JSONObject("{\"$in\": " + idLimiter + "}"));
             collectionQueries.get(collection).put("json", collectionJSON);
 
             final String queryString = collectionJSON.toString();
             final QueryResultsIterator<KeyValue> queryResponse = stub.getPrivateDataQueryResult(collection, queryString);
-        
+
             Map<String, JSONObject> queryResult = this.iterateIntoMap(queryResponse);
             if(queryResult.size() == 0) {
                 if (required) {
@@ -93,7 +91,7 @@ public class QueryHandler<T extends State> {
                         json.put(jsonKey, existing.get(jsonKey));
                     }
                 }
-                
+
                 finalResult.put(id, json);
             }
         }
@@ -103,7 +101,7 @@ public class QueryHandler<T extends State> {
 
     private Map<String, JSONObject> iterateIntoMap(QueryResultsIterator<KeyValue> values) {
         Map<String, JSONObject> resultMap = new HashMap<String, JSONObject>();
-        
+
         for (KeyValue value : values) {
 
             final String data = value.getStringValue();
@@ -141,7 +139,7 @@ public class QueryHandler<T extends State> {
                     if (annotation != null) {
                         CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections());
                         final String[] entries = collectionHandler.getEntries();
-        
+
                         for (String collection : entries) {
                             JSONObject collectionMapProp = collectionQueries.get(collection);
                             collectionMapProp.put("required", true);
