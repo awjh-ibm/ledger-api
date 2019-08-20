@@ -121,6 +121,15 @@ public abstract class StateList<T extends State> {
         return returnVal;
     }
 
+    public T getByHash(String hash) {
+        JSONObject hashQuery = new JSONObject("{\"selector\": {\"hash\": \""+hash+"\"}}");
+        ArrayList<T> assets = this.query(hashQuery);
+        if (assets.size() > 1) {
+            throw new RuntimeException("More than one asset shares the same hash...");
+        }
+        return assets.get(0);
+    }
+
     @SuppressWarnings("unchecked")
     public HistoricState<T>[] getHistory(String key) {
         // No history for private data
