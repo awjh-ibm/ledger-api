@@ -77,6 +77,11 @@ public abstract class State {
         return false;
     }
 
+    public <T extends State> T toPublicForm() {
+        String json = this.serialize();
+        return (T) State.deserialize(this.getClass(), json, new String[]{});
+    }
+
     public static <T extends State> T deserialize(Class<T> clazz, String json, String[] collections) {
         @SuppressWarnings("unchecked")
         Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
