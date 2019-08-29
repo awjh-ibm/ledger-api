@@ -7,6 +7,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -143,7 +145,13 @@ public abstract class State {
             // value should be a json object in this sense
             return State.deserialize(tClass, value.toString(), collections);
         } else if (type.getName().equals("java.util.Date")) {
-            return new Date((long) value);
+            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            try {
+                return formatter.parse((String) value);
+            } catch (ParseException e) {
+                e.printStackTrace();
+                return "";
+            }
         } else if (Enum.class.isAssignableFrom(type)) {
             try {
                 Method valueOf = type.getMethod("valueOf", String.class);
@@ -230,7 +238,8 @@ public abstract class State {
                         State stateValue = (State) value;
                         json.put(field.getName(), new JSONObject(stateValue.serialize(collection, force)));
                     } else if (field.getType().getName().equals("java.util.Date") && value != null) {
-                        json.put(field.getName(), ((Date) value).getTime());
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                        json.put(field.getName(), formatter.format((Date) value));
                     } else {
                         json.put(field.getName(), value);
                     }

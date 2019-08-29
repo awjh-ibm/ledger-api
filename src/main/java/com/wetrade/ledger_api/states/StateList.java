@@ -68,6 +68,12 @@ public abstract class StateList<T extends State> {
         }
     }
 
+    public void addBulk(T[] states) throws RuntimeException {
+        for (T state : states) {
+            this.add(state);
+        }
+    }
+
     private String getWorldStateData(String key) {
         final String ledgerKey = this.ctx.getStub().createCompositeKey(this.name, State.splitKey(key)).toString();
         final String worldStateData = new String(this.ctx.getStub().getState(ledgerKey));
