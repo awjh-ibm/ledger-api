@@ -26,7 +26,7 @@ public abstract class StateList<T extends State> {
 
     public StateList(Context ctx, String listName) {
         this.ctx = ctx;
-        this.name = listName;
+        this.name = listName + "|";
         this.supportedClass = null;
         this.collections = new String[] {};
     }

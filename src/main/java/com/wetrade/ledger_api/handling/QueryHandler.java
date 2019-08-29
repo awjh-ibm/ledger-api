@@ -42,8 +42,15 @@ public class QueryHandler<T extends State> {
 
         Set<String> foundIds = queryResults.get(0).keySet();
 
+        boolean collectionInputRequired = false;
+
         for (String collection : this.collections) {
             boolean required = collectionQueries.get(collection).getBoolean("required");
+
+            if (required) {
+                collectionInputRequired = true;
+            }
+
             JSONObject collectionJSON = collectionQueries.get(collection).getJSONObject("json");
 
             // todo update keys and remove those that are already in the map and don't exist here
@@ -53,7 +60,14 @@ public class QueryHandler<T extends State> {
             collectionQueries.get(collection).put("json", collectionJSON);
 
             final String queryString = collectionJSON.toString();
-            final QueryResultsIterator<KeyValue> queryResponse = stub.getPrivateDataQueryResult(collection, queryString);
+
+            QueryResultsIterator<KeyValue> queryResponse = null;
+
+            try {
+                queryResponse = stub.getPrivateDataQueryResult(collection, queryString);
+            } catch (Exception e) {
+                break;
+            }
 
             Map<String, JSONObject> queryResult = this.iterateIntoMap(queryResponse);
             if(queryResult.size() == 0) {
@@ -66,6 +80,10 @@ public class QueryHandler<T extends State> {
 
             foundIds = queryResult.keySet();
             queryResults.add(queryResult);
+        }
+
+        if (collectionInputRequired && usedCollections.size() == 0) {
+            return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
         }
 
         Set<String> matchingIds = queryResults.get(0).keySet();
