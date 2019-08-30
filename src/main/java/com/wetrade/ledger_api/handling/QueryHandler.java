@@ -45,7 +45,7 @@ public class QueryHandler<T extends State> {
         boolean collectionInputRequired = false;
 
         for (String collection : this.collections) {
-            boolean required = collectionQueries.get(collection).getBoolean("required");
+            boolean required = collectionQueries.get(collection).getBoolean("required"); // TODO MAKE REQUIRED HANDLE WHEN IT IS REQUIRED BUT COULD BE PDC1 OR PDC2
 
             if (required) {
                 collectionInputRequired = true;
@@ -66,14 +66,12 @@ public class QueryHandler<T extends State> {
             try {
                 queryResponse = stub.getPrivateDataQueryResult(collection, queryString);
             } catch (Exception e) {
-                break;
+                continue;
             }
 
             Map<String, JSONObject> queryResult = this.iterateIntoMap(queryResponse);
             if(queryResult.size() == 0) {
-                if (required) {
-                    return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
-                }
+                continue; 
             } else {
                 usedCollections.add(collection);
             }
