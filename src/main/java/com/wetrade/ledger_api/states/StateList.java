@@ -132,6 +132,8 @@ public abstract class StateList<T extends State> {
         ArrayList<T> assets = this.query(hashQuery);
         if (assets.size() > 1) {
             throw new RuntimeException("More than one asset shares the same hash...");
+        } else if (assets.size() == 0) {
+            throw new RuntimeException("There are no " + this.name + " with this hash");
         }
         return assets.get(0);
     }
