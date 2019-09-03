@@ -1,24 +1,23 @@
 package com.wetrade.ledger_api.states;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Map;
 
-import com.wetrade.ledger_api.annotations.Private;
-import com.wetrade.ledger_api.collections.CollectionRulesHandler;
 import com.wetrade.ledger_api.handling.QueryHandler;
 import com.wetrade.ledger_api.handling.QueryResponse;
 
+import org.hyperledger.fabric.Logger;
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.shim.ledger.KeyModification;
 import org.hyperledger.fabric.shim.ledger.KeyValue;
 import org.hyperledger.fabric.shim.ledger.QueryResultsIterator;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 public abstract class StateList<T extends State> {
+    private Logger logger = Logger.getLogger(StateList.class);
     private String name;
     private Class<? extends T> supportedClass;
     private String[] collections;
@@ -28,7 +27,16 @@ public abstract class StateList<T extends State> {
         this.ctx = ctx;
         this.name = listName + "|";
         this.supportedClass = null;
-        this.collections = new String[] {};
+
+        Map<String, byte[]> trans = ctx.getStub().getTransient();
+
+        try {
+            String stringCollection = new String(trans.get("collections"));
+            this.collections = new JSONArray(stringCollection).toList().toArray(new String[]{});
+        } catch (Exception ex) {
+            logger.warning("No private data collections provided");
+            this.collections = new String[]{};
+        }
     }
 
     public boolean exists(String key) {
@@ -60,6 +68,7 @@ public abstract class StateList<T extends State> {
 
             if (privateData.length > 2) {
                 try {
+                    logger.info("Collection being added to: " + collection);
                     this.ctx.getStub().putPrivateData(collection, key, privateData);
                 } catch (Exception err) {
                     // TODO CHECK IF THIS HAPPENS AS NOT ALLOWED OR BECAUSE OTHER BAD THINGS HAVE HAPPENED
@@ -260,23 +269,9 @@ public abstract class StateList<T extends State> {
         }
     }
 
-    @SuppressWarnings("rawtypes")
+    // TODO: Remove useless param
     private String[] getCollections(Class clazz) {
-        // don't want to do this everytime. make more efficient
-        final ArrayList<String> collections = new ArrayList<String>();
-
-        for (Field field : clazz.getDeclaredFields()) {
-            final Private annotation = field.getAnnotation(Private.class);
-
-            if (annotation != null) {
-                CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections());
-                final String[] entries = collectionHandler.getEntries();
-
-                collections.addAll(Arrays.asList(entries));
-            }
-        }
-
-        return Arrays.stream(collections.toArray(new String[collections.size()])).distinct().toArray(String[]::new);
+        return this.collections;
     }
 
     protected void use(Class<? extends T> stateClass) {
