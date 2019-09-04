@@ -9,5 +9,5 @@ import java.lang.annotation.Target;
 @Target(ElementType.FIELD)
 public abstract @interface Private {
   
-  public abstract java.lang.String collections();
+  public abstract java.lang.String collections() default "AnyOf('*')";
 }

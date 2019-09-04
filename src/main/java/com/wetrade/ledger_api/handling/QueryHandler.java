@@ -19,7 +19,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 public class QueryHandler<T extends State> {
     protected final Logger logger = Logger.getLogger(QueryHandler.class);
-    private Map<String, JSONObject> collectionQueries;
+    private Map<String, Object> collectionQueries;
     private String[] collections;
     private Context ctx;
 
@@ -36,28 +36,20 @@ public class QueryHandler<T extends State> {
 
         ArrayList<String> usedCollections = new ArrayList<String>();
 
-        final String worldStateQueryString = collectionQueries.get("worldState").getJSONObject("json").toString();
+        final String worldStateQueryString = collectionQueries.get("worldState").toString();
         final QueryResultsIterator<KeyValue> worldStateValues = this.ctx.getStub().getQueryResult(worldStateQueryString);
         queryResults.add(this.iterateIntoMap(worldStateValues));
 
         Set<String> foundIds = queryResults.get(0).keySet();
 
-        boolean collectionInputRequired = false;
-
         for (String collection : this.collections) {
-            boolean required = collectionQueries.get(collection).getBoolean("required"); // TODO MAKE REQUIRED HANDLE WHEN IT IS REQUIRED BUT COULD BE PDC1 OR PDC2
-
-            if (required) {
-                collectionInputRequired = true;
-            }
-
-            JSONObject collectionJSON = collectionQueries.get(collection).getJSONObject("json");
+            JSONObject collectionJSON = (JSONObject) collectionQueries.get(collection);
 
             // todo update keys and remove those that are already in the map and don't exist here
             String idLimiter = new JSONArray(foundIds).toString();
 
             collectionJSON.getJSONObject("selector").put("_id", new JSONObject("{\"$in\": " + idLimiter + "}"));
-            collectionQueries.get(collection).put("json", collectionJSON);
+            collectionQueries.put(collection, collectionJSON);
 
             final String queryString = collectionJSON.toString();
 
@@ -80,8 +72,11 @@ public class QueryHandler<T extends State> {
             queryResults.add(queryResult);
         }
 
-        if (collectionInputRequired && usedCollections.size() == 0) {
-            return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
+        if (collectionQueries.containsKey("privateCollectionsRule")) {
+            CollectionRulesHandler collectionHandler = new CollectionRulesHandler((String) collectionQueries.get("privateCollectionRule"), usedCollections.toArray(new String[]{}));
+            if (!collectionHandler.evaluate()) {
+                return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
+            }
         }
 
         Set<String> matchingIds = queryResults.get(0).keySet();
@@ -130,18 +125,20 @@ public class QueryHandler<T extends State> {
         return resultMap;
     }
 
-    private Map<String, JSONObject> parseQuery(JSONObject query, String listName, String[] collections, Class<? extends T> clazz) {
+    private Map<String, Object> parseQuery(JSONObject query, String listName, String[] collections, Class<? extends T> clazz) {
         final JSONObject baseQuery = new JSONObject("{\"selector\": {}}");
         baseQuery.getJSONObject("selector").put("_id", new JSONObject());
         baseQuery.getJSONObject("selector").getJSONObject("_id").put("$regex", ".*" + listName + ".*");
 
-        Map<String, JSONObject> collectionQueries = new HashMap<String, JSONObject>();
+        Map<String, Object> collectionQueries = new HashMap<String, Object>();
 
-        collectionQueries.put("worldState", new JSONObject("{\"required\": true, \"json\": " + baseQuery.toString() + "}"));
+        collectionQueries.put("worldState", new JSONObject(baseQuery.toString()));
 
         for (String collection: collections) {
-            collectionQueries.put(collection, new JSONObject("{\"required\": false, \"json\": " + baseQuery.toString() + "}"));
+            collectionQueries.put(collection, new JSONObject(baseQuery.toString()));
         }
+
+        ArrayList<String> collectionRules = new ArrayList<String>();
 
         if (query.has("selector")) {
             JSONObject selector = query.getJSONObject("selector");
@@ -154,19 +151,30 @@ public class QueryHandler<T extends State> {
 
                     if (annotation != null) {
                         CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections());
-                        final String[] entries = collectionHandler.getEntries();
+                        String[] entries = collectionHandler.getEntries();
+
+                        String selectorRule = "AnyOf(";
+
+                        if (entries[0].equals("*")) {
+                            entries = collections;
+                        }
 
                         for (String collection : entries) {
                             if (!collectionQueries.containsKey(collection)) {
                                 continue;
                             }
-                            JSONObject collectionMapProp = collectionQueries.get(collection);
-                            collectionMapProp.put("required", true);
-                            JSONObject collectionSelector = collectionMapProp.getJSONObject("json").getJSONObject("selector");
+    
+                            JSONObject collectionQuery = (JSONObject) collectionQueries.get(collection);
+                            JSONObject collectionSelector = collectionQuery.getJSONObject("selector");
                             collectionSelector.put(property, selector.get(property));
+                            selectorRule = "'" + collection + "', ";
                         }
+
+                        selectorRule = selectorRule.substring(0, selectorRule.length() - 2) + ")";
+
+                        collectionRules.add(selectorRule);
                     } else {
-                        JSONObject worldStateSelector = collectionQueries.get("worldState").getJSONObject("json").getJSONObject("selector");
+                        JSONObject worldStateSelector = ((JSONObject) collectionQueries.get("worldState")).getJSONObject("selector");
                         worldStateSelector.put(property, selector.get(property));
                     }
 
@@ -174,6 +182,18 @@ public class QueryHandler<T extends State> {
                     throw new RuntimeException("Property " + property + " does not exist for state type " + clazz.getName());
                 }
             }
+        }
+
+        String queryPrivateRule = "AllOf(";
+
+        for (String collectionRule : collectionRules) {
+            queryPrivateRule += "'" + collectionRule + "', ";
+        }
+
+        queryPrivateRule = queryPrivateRule.substring(0, queryPrivateRule.length() - 2) + ")";
+
+        if (collectionRules.size() > 0) {
+            collectionQueries.put("privateCollectionsRule", queryPrivateRule);
         }
 
         return collectionQueries;

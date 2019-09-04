@@ -9,5 +9,5 @@ import java.lang.annotation.Target;
 @Target(ElementType.CONSTRUCTOR)
 public abstract @interface Deserialize {
   
-  public abstract java.lang.String collections();
+  public abstract java.lang.String collections() default "AnyOf('*')";
 }

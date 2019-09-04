@@ -85,7 +85,7 @@ public class CollectionRulesHandler {
     private Boolean collectionFound(Node<CollectionRules> node) {
         final String collection = this.parseQuotedString(node);
 
-        return this.collections.contains(collection);
+        return collection.equals("*") || collections.contains(collection);
     }
 
     private Boolean comparisonItemHandler(Node<CollectionRules> node) {
