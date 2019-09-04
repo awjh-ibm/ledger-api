@@ -12,7 +12,6 @@ import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.shim.ledger.KeyModification;
 import org.hyperledger.fabric.shim.ledger.KeyValue;
 import org.hyperledger.fabric.shim.ledger.QueryResultsIterator;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,23 +19,12 @@ public abstract class StateList<T extends State> {
     private Logger logger = Logger.getLogger(StateList.class);
     private String name;
     private Class<? extends T> supportedClass;
-    private String[] collections;
     private Context ctx;
 
     public StateList(Context ctx, String listName) {
         this.ctx = ctx;
         this.name = listName + "|";
         this.supportedClass = null;
-
-        Map<String, byte[]> trans = ctx.getStub().getTransient();
-
-        try {
-            String stringCollection = new String(trans.get("collections"));
-            this.collections = new JSONArray(stringCollection).toList().toArray(new String[]{});
-        } catch (Exception ex) {
-            logger.warning("No private data collections provided");
-            this.collections = new String[]{};
-        }
     }
 
     public boolean exists(String key) {
@@ -49,6 +37,10 @@ public abstract class StateList<T extends State> {
     }
 
     public void add(T state) throws RuntimeException {
+        this.add(state, new String[]{});
+    }
+
+    public void add(T state, String[] collections) throws RuntimeException {
         final String stateKey = state.getKey();
 
         if (this.exists(stateKey)) {
@@ -62,7 +54,7 @@ public abstract class StateList<T extends State> {
 
         this.ctx.getStub().putState(key, worldStateData);
 
-        for (String collection : this.getCollections(state.getClass())) {
+        for (String collection : collections) {
             final String collectionSerialized = state.serialize(collection);
             final byte[] privateData = collectionSerialized.getBytes();
 
@@ -74,12 +66,6 @@ public abstract class StateList<T extends State> {
                     // TODO CHECK IF THIS HAPPENS AS NOT ALLOWED OR BECAUSE OTHER BAD THINGS HAVE HAPPENED
                 }
             }
-        }
-    }
-
-    public void addBulk(T[] states) throws RuntimeException {
-        for (T state : states) {
-            this.add(state);
         }
     }
 
@@ -95,6 +81,10 @@ public abstract class StateList<T extends State> {
     }
 
     public T get(String key) throws RuntimeException {
+        return this.get(key, new String[]{});
+    }
+
+    public T get(String key, String[] collections) throws RuntimeException {
         final String ledgerKey = this.ctx.getStub().createCompositeKey(this.name, State.splitKey(key)).toString();
         final String worldStateData = this.getWorldStateData(key);
 
@@ -104,11 +94,9 @@ public abstract class StateList<T extends State> {
             throw new RuntimeException("Cannot get state for key " + key + ". State class is not in list of supported classes for state list.");
         }
 
-        final Class<? extends T> clazz = this.supportedClass;
-
         ArrayList<String> usedCollections = new ArrayList<String>();
 
-        for (String collection : this.getCollections(clazz)) {
+        for (String collection : collections) {
             try {
                 final String privateData = new String(ctx.getStub().getPrivateData(collection, ledgerKey));
 
@@ -136,9 +124,14 @@ public abstract class StateList<T extends State> {
         return returnVal;
     }
 
+
     public T getByHash(String hash) {
+        return this.getByHash(hash, new String[]{});
+    }
+
+    public T getByHash(String hash, String[] collections) {
         JSONObject hashQuery = new JSONObject("{\"selector\": {\"hash\": \""+hash+"\"}}");
-        ArrayList<T> assets = this.query(hashQuery);
+        ArrayList<T> assets = this.query(hashQuery, collections);
         if (assets.size() > 1) {
             throw new RuntimeException("More than one asset shares the same hash...");
         } else if (assets.size() == 0) {
@@ -181,7 +174,11 @@ public abstract class StateList<T extends State> {
     }
 
     public ArrayList<T> query(JSONObject query) {
-        final QueryHandler<T> qh = new QueryHandler<T>(query, this.name, this.collections, this.ctx, this.supportedClass);
+        return this.query(query, new String[]{});
+    }
+
+    public ArrayList<T> query(JSONObject query, String[] collections) {
+        final QueryHandler<T> qh = new QueryHandler<T>(query, this.name, collections, this.ctx, this.supportedClass);
         final QueryResponse queryResult = qh.execute();
 
         final String[] usedCollections = queryResult.getUsedCollections();
@@ -206,7 +203,11 @@ public abstract class StateList<T extends State> {
     }
 
     public ArrayList<T> getAll() {
-        return this.query(new JSONObject());
+        return this.query(new JSONObject(), new String[]{});
+    }
+
+    public ArrayList<T> getAll(String[] collections) {
+        return this.query(new JSONObject(), collections);
     }
 
     @SuppressWarnings("unused")
@@ -222,10 +223,18 @@ public abstract class StateList<T extends State> {
     }
 
     public void update(T state) {
-        this.update(state, false);
+        this.update(state, new String[]{}, false);
     }
 
-    public void update(T state, boolean force) throws RuntimeException {
+    public void update(T state, boolean force) {
+        this.update(state, new String[]{}, force);
+    }
+
+    public void update(T state, String[] collections) {
+        this.update(state, collections, false);
+    }
+
+    public void update(T state, String[] collections, boolean force) throws RuntimeException {
         final String stateKey = state.getKey();
 
         if (!this.exists(stateKey) && !force) {
@@ -238,7 +247,7 @@ public abstract class StateList<T extends State> {
 
         this.ctx.getStub().putState(ledgerKey, data);
 
-        for (String collection : this.getCollections(state.getClass())) {
+        for (String collection : collections) {
             final byte[] privateData = state.serialize(collection).getBytes();
 
             if (privateData.length > 2) {
@@ -252,14 +261,16 @@ public abstract class StateList<T extends State> {
     }
 
     public void delete(String key) {
-        if (this.exists(key)) {
-            final T state = this.get(key);
+        this.delete(key, new String[]{});
+    }
 
+    public void delete(String key, String[] collections) {
+        if (this.exists(key)) {
             final String ledgerKey = this.ctx.getStub().createCompositeKey(this.name, State.splitKey(key)).toString();
 
             this.ctx.getStub().delState(ledgerKey);
 
-            for (String collection : this.getCollections(state.getClass())) {
+            for (String collection : collections) {
                 try {
                     this.ctx.getStub().delPrivateData(collection, ledgerKey);
                 } catch (Exception err) {
@@ -269,15 +280,8 @@ public abstract class StateList<T extends State> {
         }
     }
 
-    // TODO: Remove useless param
-    private String[] getCollections(Class clazz) {
-        return this.collections;
-    }
-
     protected void use(Class<? extends T> stateClass) {
         this.supportedClass = stateClass;
-
-        this.collections = this.getCollections(stateClass);
     }
 
     private T deserialize(JSONObject json, String[] collections) {

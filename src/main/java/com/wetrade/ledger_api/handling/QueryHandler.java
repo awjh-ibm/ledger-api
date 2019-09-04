@@ -71,7 +71,7 @@ public class QueryHandler<T extends State> {
 
             Map<String, JSONObject> queryResult = this.iterateIntoMap(queryResponse);
             if(queryResult.size() == 0) {
-                continue; 
+                continue;
             } else {
                 usedCollections.add(collection);
             }
@@ -157,6 +157,9 @@ public class QueryHandler<T extends State> {
                         final String[] entries = collectionHandler.getEntries();
 
                         for (String collection : entries) {
+                            if (!collectionQueries.containsKey(collection)) {
+                                continue;
+                            }
                             JSONObject collectionMapProp = collectionQueries.get(collection);
                             collectionMapProp.put("required", true);
                             JSONObject collectionSelector = collectionMapProp.getJSONObject("json").getJSONObject("selector");
