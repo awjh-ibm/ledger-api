@@ -73,7 +73,7 @@ public class QueryHandler<T extends State> {
         }
 
         if (collectionQueries.containsKey("privateCollectionsRule")) {
-            CollectionRulesHandler collectionHandler = new CollectionRulesHandler((String) collectionQueries.get("privateCollectionRule"), usedCollections.toArray(new String[]{}));
+            CollectionRulesHandler collectionHandler = new CollectionRulesHandler((String) collectionQueries.get("privateCollectionsRule"), usedCollections.toArray(new String[]{}));
             if (!collectionHandler.evaluate()) {
                 return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
             }
@@ -161,13 +161,14 @@ public class QueryHandler<T extends State> {
 
                         for (String collection : entries) {
                             if (!collectionQueries.containsKey(collection)) {
+                                // TODO: If no collections from annotation are listed in supplied collections, query cannot succeed. Return blank
                                 continue;
                             }
-    
+
                             JSONObject collectionQuery = (JSONObject) collectionQueries.get(collection);
                             JSONObject collectionSelector = collectionQuery.getJSONObject("selector");
                             collectionSelector.put(property, selector.get(property));
-                            selectorRule = "'" + collection + "', ";
+                            selectorRule += "'" + collection + "', ";
                         }
 
                         selectorRule = selectorRule.substring(0, selectorRule.length() - 2) + ")";
@@ -187,10 +188,11 @@ public class QueryHandler<T extends State> {
         String queryPrivateRule = "AllOf(";
 
         for (String collectionRule : collectionRules) {
-            queryPrivateRule += "'" + collectionRule + "', ";
+            queryPrivateRule += collectionRule + ", ";
         }
 
         queryPrivateRule = queryPrivateRule.substring(0, queryPrivateRule.length() - 2) + ")";
+        logger.info("QUERY: " + queryPrivateRule);
 
         if (collectionRules.size() > 0) {
             collectionQueries.put("privateCollectionsRule", queryPrivateRule);

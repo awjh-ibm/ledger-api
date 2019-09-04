@@ -20,6 +20,7 @@ import com.wetrade.ledger_api.annotations.Private;
 import com.wetrade.ledger_api.annotations.VerifyHash;
 import com.wetrade.ledger_api.collections.CollectionRulesHandler;
 
+import org.hyperledger.fabric.Logger;
 import org.hyperledger.fabric.contract.execution.JSONTransactionSerializer;
 import org.hyperledger.fabric.contract.metadata.TypeSchema;
 import org.hyperledger.fabric.contract.routing.TypeRegistry;
@@ -29,6 +30,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public abstract class State {
+    private Logger logger = Logger.getLogger(StateList.class);
 
     public static Boolean verifyHash(String id, Map<String, byte[]> transientData) {
         throw new RuntimeException("Not yet implemented");
@@ -201,6 +203,7 @@ public abstract class State {
     public State(String[] keyParts) {
         this.key = State.makeKey(keyParts);
         this.stateClass = this.getClass().getName();
+        // TODO: Currently have to call updateHash in child constructor as values not set when this is called
         this.hash = this.generateHash();
     }
 
@@ -229,6 +232,9 @@ public abstract class State {
 
         for (Field field : fields) {
             field.setAccessible(true);
+            if (field.getName().equals("logger")) {
+                continue;
+            }
 
             if (force || this.shouldAddToJSON(collection, field)) {
                 try {
@@ -266,6 +272,10 @@ public abstract class State {
 
     public String getHash() {
         return this.hash;
+    }
+
+    public void updateHash() {
+        this.hash = this.generateHash();
     }
 
     private String generateHash() {

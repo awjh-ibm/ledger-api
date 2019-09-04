@@ -31,7 +31,7 @@ public class CollectionRules extends BaseParser<Object> {
     }
 
     public Rule ComparisonItem() {
-        return FirstOf(OR(), AND(), QuotedString());
+        return FirstOf(OR(), AND(), AllOf(), AnyOf(), QuotedString());
     }
 
     public Rule QuotedString() {
