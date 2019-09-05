@@ -44,7 +44,7 @@ public abstract class State {
         return key.split(":");
     }
 
-    public static <T extends State> Boolean verifyHash(Class<T> clazz, Map<String, byte[]> transientData, String hash) {
+    public static <T extends State> Boolean verifyHash(Class<T> clazz, String hash, Object ...args) {
         // anyway to do this without taking clazz?
         @SuppressWarnings("unchecked")
         Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
@@ -55,21 +55,8 @@ public abstract class State {
             if (annotation != null) {
                 Parameter[] parameters = constructor.getParameters();
 
-                TypeRegistry tr = new TypeRegistryImpl(); // may need some setting up
-                JSONTransactionSerializer jts = new JSONTransactionSerializer(tr);
-
-                Object[] args = new Object[parameters.length];
-
-                for (int i = 0; i < parameters.length; i++) {
-                    final Parameter param = parameters[i];
-                    final String paramName = param.getName();
-
-                    if (!transientData.containsKey(paramName)) {
-                        throw new RuntimeException("Transient data missing required property: " + paramName);
-                    }
-
-                    TypeSchema schema = TypeSchema.typeConvert(param.getType());
-                    args[i] = jts.fromBuffer(transientData.get(paramName), schema);
+                if (parameters.length != args.length) {
+                    throw new RuntimeException("Invalid args supplied. Expected " + parameters.length + " got " + args.length);
                 }
 
                 T obj = State.buildState(args, constructor);
