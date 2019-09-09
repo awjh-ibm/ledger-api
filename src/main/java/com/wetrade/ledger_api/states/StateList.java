@@ -236,9 +236,7 @@ public abstract class StateList<T extends State> {
     }
 
     public void update(T state, String[] collections, boolean force) throws RuntimeException {
-        logger.info("BEFORE HASH: " + state.getHash());
         state.updateHash();
-        logger.info("AFTER HASH: " + state.getHash());
 
         final String stateKey = state.getKey();
 

@@ -45,6 +45,7 @@ public abstract class State {
     }
 
     public static <T extends State> Boolean verifyHash(Class<T> clazz, String hash, Object ...args) {
+        Logger logger = Logger.getLogger(StateList.class);
         // anyway to do this without taking clazz?
         @SuppressWarnings("unchecked")
         Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
@@ -60,11 +61,9 @@ public abstract class State {
                 }
 
                 T obj = State.buildState(args, constructor);
-
                 return obj.getHash().equals(hash);
             }
         }
-
         return false;
     }
 
@@ -190,8 +189,6 @@ public abstract class State {
     public State(String[] keyParts) {
         this.key = State.makeKey(keyParts);
         this.stateClass = this.getClass().getName();
-        // TODO: Currently have to call updateHash in child constructor as values not set when this is called
-        this.hash = this.generateHash();
     }
 
     protected State(String[] keyParts, String hash) {
@@ -219,7 +216,7 @@ public abstract class State {
 
         for (Field field : fields) {
             field.setAccessible(true);
-            if (field.getName().equals("logger")) {
+            if (field.getName().equals("logger") || field.getName().startsWith("$")) {
                 continue;
             }
 
@@ -267,7 +264,7 @@ public abstract class State {
 
     private String generateHash() {
         JSONObject jsonObject = this.jsonify(null, true);
-        jsonObject.remove(hash);
+        jsonObject.remove("hash");
 
         MessageDigest digest;
         try {
@@ -276,7 +273,6 @@ public abstract class State {
             // SHOULD NEVER HAPPEN BUT CHEERS UP JAVA
             return "";
         }
-
         byte[] encodedHash = digest.digest(jsonObject.toString().getBytes());
 
         StringBuilder sb = new StringBuilder();
