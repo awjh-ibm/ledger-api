@@ -18,7 +18,7 @@ import com.wetrade.ledger_api.annotations.DefaultDeserialize;
 import com.wetrade.ledger_api.annotations.Deserialize;
 import com.wetrade.ledger_api.annotations.Private;
 import com.wetrade.ledger_api.annotations.VerifyHash;
-import com.wetrade.ledger_api.collections.CollectionRulesHandler;
+import com.wetrade.ledger_api.collections.BooleanRulesHandler;
 
 import org.hyperledger.fabric.Logger;
 import org.hyperledger.fabric.contract.execution.JSONTransactionSerializer;
@@ -30,7 +30,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public abstract class State {
-    private Logger logger = Logger.getLogger(StateList.class);
 
     public static Boolean verifyHash(String id, Map<String, byte[]> transientData) {
         throw new RuntimeException("Not yet implemented");
@@ -45,7 +44,6 @@ public abstract class State {
     }
 
     public static <T extends State> Boolean verifyHash(Class<T> clazz, String hash, Object ...args) {
-        Logger logger = Logger.getLogger(StateList.class);
         // anyway to do this without taking clazz?
         @SuppressWarnings("unchecked")
         Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
@@ -83,7 +81,7 @@ public abstract class State {
                 final Deserialize annotation = constructor.getAnnotation(Deserialize.class);
 
                 if (annotation != null) {
-                    CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections(), collections);
+                    BooleanRulesHandler collectionHandler = new BooleanRulesHandler(annotation.collections(), collections);
 
                     if (collectionHandler.evaluate()) {
                         if (matchingConstructor == null || constructor.getParameterCount() > matchingConstructor.getParameterCount()) {
@@ -306,7 +304,7 @@ public abstract class State {
         if (annotation == null) {
             return false;
         }
-        CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections(), new String[] {collection});
+        BooleanRulesHandler collectionHandler = new BooleanRulesHandler(annotation.collections(), new String[] {collection});
 
         return collectionHandler.evaluate();
     }

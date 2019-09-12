@@ -5,7 +5,7 @@ import org.parboiled.BaseParser;
 import org.parboiled.annotations.BuildParseTree;
 
 @BuildParseTree
-public class CollectionRules extends BaseParser<Object> {
+public class BooleanRules extends BaseParser<Object> {
     public Rule Expression() {
         return FirstOf(AnyOf(), AllOf(), OR(), AND());
     }

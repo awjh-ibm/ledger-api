@@ -14,26 +14,26 @@ enum Operators {
     AND
 }
 
-public class CollectionRulesHandler {
+public class BooleanRulesHandler {
 
     // TODO MAKE THIS ALL STATIC AS SEEMS THAT WOULD BE BETTER BUT AS LIAM
 
-    private List<Node<CollectionRules>> tree;
-    private List<String> collections;
+    private List<Node<BooleanRules>> tree;
+    private List<String> values;
     private String input;
 
-    public CollectionRulesHandler(String rules) {
+    public BooleanRulesHandler(String rules) {
         this.setup(rules, new String[] {});
     }
 
-    public CollectionRulesHandler(String rules, String[] collections) {
-        this.setup(rules, collections);
+    public BooleanRulesHandler(String rules, String[] values) {
+        this.setup(rules, values);
     }
 
-    private void setup(String rules, String[] collections) {
-        CollectionRules parser = Parboiled.createParser(CollectionRules.class);
+    private void setup(String rules, String[] values) {
+        BooleanRules parser = Parboiled.createParser(BooleanRules.class);
 
-        ParsingResult<CollectionRules> result = new ReportingParseRunner<CollectionRules>(parser.Expression()).run(rules);
+        ParsingResult<BooleanRules> result = new ReportingParseRunner<BooleanRules>(parser.Expression()).run(rules);
 
         if (!result.matched) {
             throw new RuntimeException("Collection rules invalid");
@@ -41,14 +41,14 @@ public class CollectionRulesHandler {
 
         this.tree = result.parseTreeRoot.getChildren();
         this.input = rules;
-        this.collections = Arrays.asList(collections);
+        this.values = Arrays.asList(values);
     }
 
     public Boolean evaluate() {
         return this.evaluate(this.tree.get(0));
     }
 
-    private Boolean evaluate(Node<CollectionRules> node) {
+    private Boolean evaluate(Node<BooleanRules> node) {
         switch (node.getLabel()) {
             case "AnyOf": return this.AnyOfHandler(node);
             case "AllOf": return this.AllOfHandler(node);
@@ -68,8 +68,8 @@ public class CollectionRulesHandler {
         return arr.toArray(new String[arr.size()]);
     }
 
-    public void getEntries(Node<CollectionRules> node, ArrayList<String> arr) {
-        for (Node<CollectionRules> child : node.getChildren()) {
+    public void getEntries(Node<BooleanRules> node, ArrayList<String> arr) {
+        for (Node<BooleanRules> child : node.getChildren()) {
             if (child.getLabel() == "QuotedString") {
                 arr.add(this.parseQuotedString(node));
             } else {
@@ -78,31 +78,31 @@ public class CollectionRulesHandler {
         }
     }
 
-    private String parseQuotedString(Node<CollectionRules> node) {
+    private String parseQuotedString(Node<BooleanRules> node) {
         return this.input.substring(node.getStartIndex() + 1, node.getEndIndex() - 1);
     }
 
-    private Boolean collectionFound(Node<CollectionRules> node) {
+    private Boolean collectionFound(Node<BooleanRules> node) {
         final String collection = this.parseQuotedString(node);
 
-        return collection.equals("*") || collections.contains(collection);
+        return collection.equals("*") || values.contains(collection);
     }
 
-    private Boolean comparisonItemHandler(Node<CollectionRules> node) {
+    private Boolean comparisonItemHandler(Node<BooleanRules> node) {
         return this.evaluate(node.getChildren().get(0));
     }
 
-    private Boolean multiItemHandler(Node<CollectionRules> node, Operators op) {
-        final Node<CollectionRules> multiItem = node.getChildren().get(1);
+    private Boolean multiItemHandler(Node<BooleanRules> node, Operators op) {
+        final Node<BooleanRules> multiItem = node.getChildren().get(1);
 
-        final List<Node<CollectionRules>> multiItemChildren = multiItem.getChildren();
-        final Node<CollectionRules> firstComparisonItem = multiItemChildren.get(0);
-        final List<Node<CollectionRules>> otherComparisonItems = multiItemChildren.get(1).getChildren();
+        final List<Node<BooleanRules>> multiItemChildren = multiItem.getChildren();
+        final Node<BooleanRules> firstComparisonItem = multiItemChildren.get(0);
+        final List<Node<BooleanRules>> otherComparisonItems = multiItemChildren.get(1).getChildren();
 
         Boolean result = this.evaluate(firstComparisonItem);
 
-        for (Node<CollectionRules> sequence: otherComparisonItems) {
-            Node<CollectionRules> comparisonItem = sequence.getChildren().get(2);
+        for (Node<BooleanRules> sequence: otherComparisonItems) {
+            Node<BooleanRules> comparisonItem = sequence.getChildren().get(2);
 
             switch (op) {
                 case OR: result = result || this.evaluate(comparisonItem); break;
@@ -113,22 +113,22 @@ public class CollectionRulesHandler {
         return result;
     }
 
-    private Boolean AnyOfHandler(Node<CollectionRules> node) {
+    private Boolean AnyOfHandler(Node<BooleanRules> node) {
         return this.multiItemHandler(node, Operators.OR);
     }
 
-    private Boolean AllOfHandler(Node<CollectionRules> node) {
+    private Boolean AllOfHandler(Node<BooleanRules> node) {
         return this.multiItemHandler(node, Operators.AND);
     }
 
-    private Boolean ORHandler(Node<CollectionRules> node) {
-        final List<Node<CollectionRules>> children = node.getChildren();
+    private Boolean ORHandler(Node<BooleanRules> node) {
+        final List<Node<BooleanRules>> children = node.getChildren();
 
         return this.evaluate(children.get(1)) || this.evaluate(children.get(3));
     }
 
-    private Boolean ANDHandler(Node<CollectionRules> node) {
-        final List<Node<CollectionRules>> children = node.getChildren();
+    private Boolean ANDHandler(Node<BooleanRules> node) {
+        final List<Node<BooleanRules>> children = node.getChildren();
 
         return this.evaluate(children.get(1)) && this.evaluate(children.get(3));
     }

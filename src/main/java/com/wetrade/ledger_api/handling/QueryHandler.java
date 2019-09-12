@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.wetrade.ledger_api.annotations.Private;
-import com.wetrade.ledger_api.collections.CollectionRulesHandler;
+import com.wetrade.ledger_api.collections.BooleanRulesHandler;
 import com.wetrade.ledger_api.states.State;
 
 import org.hyperledger.fabric.Logger;
@@ -73,7 +73,7 @@ public class QueryHandler<T extends State> {
         }
 
         if (collectionQueries.containsKey("privateCollectionsRule")) {
-            CollectionRulesHandler collectionHandler = new CollectionRulesHandler((String) collectionQueries.get("privateCollectionsRule"), usedCollections.toArray(new String[]{}));
+            BooleanRulesHandler collectionHandler = new BooleanRulesHandler((String) collectionQueries.get("privateCollectionsRule"), usedCollections.toArray(new String[]{}));
             if (!collectionHandler.evaluate()) {
                 return new QueryResponse(new String[] {}, new HashMap<String, JSONObject>());
             }
@@ -150,7 +150,7 @@ public class QueryHandler<T extends State> {
                     final Private annotation = field.getAnnotation(Private.class);
 
                     if (annotation != null) {
-                        CollectionRulesHandler collectionHandler = new CollectionRulesHandler(annotation.collections());
+                        BooleanRulesHandler collectionHandler = new BooleanRulesHandler(annotation.collections());
                         String[] entries = collectionHandler.getEntries();
 
                         String selectorRule = "AnyOf(";
