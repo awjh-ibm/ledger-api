@@ -1,32 +1,15 @@
 package com.wetrade.ledger_api.states;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.Map;
 
-import com.wetrade.ledger_api.annotations.DefaultDeserialize;
-import com.wetrade.ledger_api.annotations.Deserialize;
-import com.wetrade.ledger_api.annotations.Private;
 import com.wetrade.ledger_api.annotations.VerifyHash;
-import com.wetrade.ledger_api.collections.BooleanRulesHandler;
+import com.wetrade.ledger_api.states.utils.Deserializer;
+import com.wetrade.ledger_api.states.utils.Serializer;
 
-import org.hyperledger.fabric.Logger;
-import org.hyperledger.fabric.contract.execution.JSONTransactionSerializer;
-import org.hyperledger.fabric.contract.metadata.TypeSchema;
-import org.hyperledger.fabric.contract.routing.TypeRegistry;
-import org.hyperledger.fabric.contract.routing.impl.TypeRegistryImpl;
-import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 public abstract class State {
@@ -58,7 +41,7 @@ public abstract class State {
                     throw new RuntimeException("Invalid args supplied. Expected " + parameters.length + " got " + args.length);
                 }
 
-                T obj = State.buildState(args, constructor);
+                T obj = Deserializer.buildItem(args, constructor);
                 return obj.getHash().equals(hash);
             }
         }
@@ -71,113 +54,12 @@ public abstract class State {
     }
 
     public static <T extends State> T deserialize(Class<T> clazz, String json, String[] collections) {
-        @SuppressWarnings("unchecked")
-        Constructor<T>[] constructors = (Constructor<T>[]) clazz.getConstructors();
-
-        Constructor<T> matchingConstructor = null;
-
-        for (Constructor<T> constructor : constructors) {
-            if (collections.length > 0) {
-                final Deserialize annotation = constructor.getAnnotation(Deserialize.class);
-
-                if (annotation != null) {
-                    BooleanRulesHandler collectionHandler = new BooleanRulesHandler(annotation.collections(), collections);
-
-                    if (collectionHandler.evaluate()) {
-                        if (matchingConstructor == null || constructor.getParameterCount() > matchingConstructor.getParameterCount()) {
-                            matchingConstructor = constructor;
-                        }
-                    }
-                }
-            } else {
-                final DefaultDeserialize annotation = constructor.getAnnotation(DefaultDeserialize.class);
-
-                if (annotation != null) {
-                    matchingConstructor = constructor;
-                    break;
-                }
-            }
-        }
-
-        if (matchingConstructor == null) {
-            throw new RuntimeException("No valid constructor found for collections returned");
-        }
-
-        JSONObject jsonObject = new JSONObject(json);
-
-        Parameter[] parameters = matchingConstructor.getParameters();
-
-        Object[] args = new Object[parameters.length];
-
-        for (int i = 0; i < parameters.length; i++) {
-            final String parameterName = parameters[i].getName();
-            final Class<?> parameterType = parameters[i].getType();
-
-            if (!jsonObject.has(parameterName)) {
-                throw new JSONException("State missing required constructor argument " + parameterName);
-            }
-
-            args[i] = State.resolveJSON(parameterType, jsonObject.get(parameterName), collections);
-        }
-
-        return State.buildState(args, matchingConstructor);
-    }
-
-    private static <T extends State> Object resolveJSON(Class<?> type, Object value, String[] collections) {
-        // TODO does matthews code solve this
-        if (State.class.isAssignableFrom(type)) {
-            @SuppressWarnings("unchecked")
-            Class<T> tClass = (Class<T>) type;
-            // value should be a json object in this sense
-            return State.deserialize(tClass, value.toString(), collections);
-        } else if (type.getName().equals("java.util.Date")) {
-            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-            try {
-                return formatter.parse((String) value);
-            } catch (ParseException e) {
-                e.printStackTrace();
-                return "";
-            }
-        } else if (Enum.class.isAssignableFrom(type)) {
-            try {
-                Method valueOf = type.getMethod("valueOf", String.class);
-                return valueOf.invoke(null, value);
-            } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-                // should not this this
-                e.printStackTrace();
-            }
-        } else if (type.isArray() || Number.class.isAssignableFrom(type)) {
-            final TypeRegistry tr = new TypeRegistryImpl(); // may need some setting up
-            final JSONTransactionSerializer jts = new JSONTransactionSerializer(tr);
-
-            final TypeSchema schema = TypeSchema.typeConvert(type);
-
-            String str;
-
-            if (type.isArray()) {
-                final JSONArray jsonArray = (JSONArray) value;
-                str = jsonArray.toString();
-            } else {
-                str = ((Number) value).toString();
-            }
-
-            return jts.fromBuffer(str.getBytes(), schema);
-        }
-
-        return value;
+        return Deserializer.deserialize(clazz, json, collections);
     }
 
     public static State deserialize(String json) {
         throw new RuntimeException("Not yet implemented");
     };
-
-    private static <T extends State> T buildState(Object[] args, Constructor<T> constructor) {
-        try {
-            return constructor.newInstance(args);
-        } catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-            throw new RuntimeException(e.getMessage());
-		}
-    }
 
     private String key;
     @SuppressWarnings("unused")
@@ -203,45 +85,8 @@ public abstract class State {
         return this.serialize(collection, false);
     }
 
-    private String serialize(String collection, Boolean force) {
-        return this.jsonify(collection, force).toString();
-    }
-
-    private JSONObject jsonify(String collection, Boolean force) {
-        JSONObject json = new JSONObject();
-
-        ArrayList<Field> fields = this.getAllFields();
-
-        for (Field field : fields) {
-            field.setAccessible(true);
-            if (field.getName().equals("logger") || field.getName().startsWith("$")) {
-                continue;
-            }
-
-            if (force || this.shouldAddToJSON(collection, field)) {
-                try {
-                    Object value = field.get(this);
-
-                    if (value instanceof State) {
-                        State stateValue = (State) value;
-                        json.put(field.getName(), new JSONObject(stateValue.serialize(collection, force)));
-                    } else if (field.getType().getName().equals("java.util.Date") && value != null) {
-                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-                        json.put(field.getName(), formatter.format((Date) value));
-                    } else {
-                        json.put(field.getName(), value);
-                    }
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IllegalArgumentException e) {
-                    e.printStackTrace();
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        return json;
+    public String serialize(String collection, Boolean force) {
+        return Serializer.serialize(this, collection, force);
     }
 
     public String getKey() {
@@ -261,7 +106,7 @@ public abstract class State {
     }
 
     private String generateHash() {
-        JSONObject jsonObject = this.jsonify(null, true);
+        JSONObject jsonObject = Serializer.jsonify(this, null, true);
         jsonObject.remove("hash");
 
         MessageDigest digest;
@@ -280,32 +125,5 @@ public abstract class State {
         }
 
         return sb.toString();
-    }
-
-    private ArrayList<Field> getAllFields() {
-        @SuppressWarnings("all")
-        Class clazz = this.getClass();
-        ArrayList<Field> fields = new ArrayList<Field>();
-
-        do {
-            fields.addAll(Arrays.asList(clazz.getDeclaredFields()));
-        } while ((clazz = clazz.getSuperclass()) != null);
-
-        return fields;
-    }
-
-    private boolean shouldAddToJSON(String collection, Field field) {
-        if (collection == null) {
-            return field.getAnnotation(Private.class) == null;
-        }
-
-        final Private annotation = field.getAnnotation(Private.class);
-
-        if (annotation == null) {
-            return false;
-        }
-        BooleanRulesHandler collectionHandler = new BooleanRulesHandler(annotation.collections(), new String[] {collection});
-
-        return collectionHandler.evaluate();
     }
 }
